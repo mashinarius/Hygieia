@@ -168,10 +168,17 @@ public class DefaultJiraClient implements JiraClient {
 	}
 	
 	
-	
+	/**
+	 *  Connects to JIRA API with basicAuth
+	 * @param jiraUrl
+	 * @return
+	 * @throws ClientProtocolException
+	 * @throws IOException
+	 */
+	@SuppressWarnings({"PMD.NPathComplexity"})
 	private HttpResponse getJiraResponse(String jiraUrl) throws ClientProtocolException, IOException
 	{
-		URI uri = URI.create(jiraUrl.toString());
+		URI uri = URI.create(jiraUrl);
 		HttpHost host = new HttpHost(uri.getHost(), uri.getPort(), uri.getScheme());
 		CredentialsProvider credsProvider = new BasicCredentialsProvider();
 		
