@@ -1,12 +1,11 @@
 package com.capitalone.dashboard.client;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.IOException;
 import java.net.Authenticator;
 import java.net.InetSocketAddress;
-import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.PasswordAuthentication;
 import java.net.Proxy;
@@ -24,8 +23,24 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.AuthCache;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.BasicAuthCache;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -152,6 +167,36 @@ public class DefaultJiraClient implements JiraClient {
 		return rt;
 	}
 	
+	
+	
+	private HttpResponse getJiraResponse(String jiraUrl) throws ClientProtocolException, IOException
+	{
+		URI uri = URI.create(jiraUrl.toString());
+		HttpHost host = new HttpHost(uri.getHost(), uri.getPort(), uri.getScheme());
+		CredentialsProvider credsProvider = new BasicCredentialsProvider();
+		
+		if (!StringUtils.isEmpty(featureSettings.getJiraCredentials())) {
+			String[] creds = (new String(Base64.decodeBase64(featureSettings.getJiraCredentials()))).split(":");
+			String uname = creds[0];
+			String pword = creds.length > 1? creds[1] : null;
+			credsProvider.setCredentials(new AuthScope(uri.getHost(), uri.getPort()), new UsernamePasswordCredentials(uname, pword));
+		}
+
+		
+		AuthCache authCache = new BasicAuthCache();
+		BasicScheme basicAuth = new BasicScheme();
+		authCache.put(host, basicAuth);
+		int timeout = 15 * 1000; // 15 sec
+		RequestConfig requestConfig = RequestConfig.custom().setConnectTimeout(timeout).setSocketTimeout(timeout).build();
+		CloseableHttpClient httpClient = HttpClients.custom().setDefaultCredentialsProvider(credsProvider).setDefaultRequestConfig(requestConfig).build();
+		HttpGet httpGet = new HttpGet(uri);
+		HttpClientContext localContext = HttpClientContext.create();
+		localContext.setAuthCache(authCache);
+
+		return httpClient.execute(host, httpGet, localContext);
+	}
+	
+	
 	@Override
 	@SuppressWarnings("PMD.NPathComplexity")
 	public List<Team> getTeams() {
@@ -185,11 +230,9 @@ public class DefaultJiraClient implements JiraClient {
 				connection = url.openConnection();
 			}
 
-			HttpURLConnection request = (HttpURLConnection) connection;
-			request.setRequestProperty("Authorization" , "Basic " + featureSettings.getJiraCredentials());
-			request.connect();
-			
-			try (InputStreamReader streamReader = new InputStreamReader((InputStream) request.getContent(), Charset.forName("UTF-8"));
+			HttpResponse response = getJiraResponse(url.toString());
+
+			try (InputStreamReader streamReader = new InputStreamReader((InputStream) response.getEntity().getContent(), Charset.forName("UTF-8"));
 			        BufferedReader inReader = new BufferedReader(streamReader)) {
 			    StringBuilder sb = new StringBuilder();	    
     			int cp;
@@ -343,11 +386,9 @@ public class DefaultJiraClient implements JiraClient {
 				connection = url.openConnection();
 			}
 
-			HttpURLConnection request = (HttpURLConnection) connection;
-			request.setRequestProperty("Authorization" , "Basic " + featureSettings.getJiraCredentials());
-			request.connect();
+			HttpResponse response = getJiraResponse(url.toString());
 			
-			InputStream in = (InputStream) request.getContent();
+			InputStream in = (InputStream) response.getEntity().getContent();
 			BufferedReader inReader = new BufferedReader(new InputStreamReader(in, Charset.forName("UTF-8")));
 			StringBuilder sb = new StringBuilder();
 		    
